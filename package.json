@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev --workspace=server\" \"npm:dev --workspace=client\"",
     "build": "npm run build --workspace=shared && npm run build --workspace=server && npm run build --workspace=client",
+    "pretest": "npm run db:generate --workspace=server",
     "test": "npm run test --workspace=shared && npm run test --workspace=server",
     "e2e": "npm run build && playwright test",
     "db:migrate": "npm run db:migrate --workspace=server",
