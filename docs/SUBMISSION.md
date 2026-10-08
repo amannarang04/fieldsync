@@ -12,7 +12,7 @@ FieldSync
 Field teams working in areas with unreliable connectivity often rely on paper surveys, which can be lost or entered inconsistently later. FieldSync lets workers collect structured survey responses offline and safely synchronize them when connectivity returns. Administrators can manage survey versions, review results, and export filtered data.
 
 **GitHub Repository**  
-[Paste the public GitHub repository URL after creating/pushing it]
+https://github.com/amannarang04/fieldsync
 
 **Deployed Application**  
 [Paste the live Vercel application URL after deployment]
