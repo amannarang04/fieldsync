@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  WORKER
+}
+
+enum ResponseStatus {
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(WORKER)
+  assignments  FormAssignment[]
+  responses    Response[]
+  refreshTokens RefreshToken[]
+  createdAt    DateTime       @default(now())
+}
+
+model Form {
+  id          String           @id @default(cuid())
+  title       String
+  versions    FormVersion[]
+  assignments FormAssignment[]
+  createdAt   DateTime         @default(now())
+}
+
+model FormVersion {
+  id        String     @id @default(cuid())
+  formId    String
+  form      Form       @relation(fields: [formId], references: [id], onDelete: Cascade)
+  version   Int
+  title     String
+  fields    Json
+  createdAt DateTime   @default(now())
+  responses Response[]
+
+  @@unique([formId, version])
+  @@index([formId])
+}
+
+model FormAssignment {
+  id       String @id @default(cuid())
+  formId   String
+  workerId String
+  form     Form   @relation(fields: [formId], references: [id], onDelete: Cascade)
+  worker   User   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, workerId])
+  @@index([workerId])
+}
+
+model Response {
+  id               String         @id @default(cuid())
+  clientId         String         @unique
+  formVersionId    String
+  formVersion      FormVersion    @relation(fields: [formVersionId], references: [id])
+  workerId         String
+  worker           User           @relation(fields: [workerId], references: [id])
+  answers          Json
+  lat              Float?
+  lng              Float?
+  collectedAt      DateTime
+  receivedAt       DateTime       @default(now())
+  status           ResponseStatus
+  rejectionReason  String?
+
+  @@index([workerId, collectedAt])
+  @@index([formVersionId, status])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
