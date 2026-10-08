@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: fieldsync
       POSTGRES_PASSWORD: fieldsync_dev
       POSTGRES_DB: fieldsync
-    ports: ["5432:5432"]
+    ports: ["5433:5432"]
     volumes: ["fieldsync-db:/var/lib/postgresql/data"]
 volumes:
   fieldsync-db:

@@ -41,7 +41,7 @@ Each local response receives a UUID `clientId` and its `formVersionId` at collec
 Prerequisites: Node.js 20+, npm 10+, and Docker Desktop (or PostgreSQL 16).
 
 1. Copy `server/.env.example` to `server/.env` and set long random JWT secrets. Copy `client/.env.example` to `client/.env` if the API URL differs.
-2. Start PostgreSQL: `docker compose up -d`.
+2. Start PostgreSQL: `docker compose up -d` (FieldSync publishes Postgres on host port `5433` to avoid colliding with an existing local database).
 3. Install dependencies from the root: `npm install`.
 4. Generate Prisma client and apply migrations: `npm run db:migrate --workspace=server`.
 5. Load demo data: `npm run db:seed --workspace=server`.
@@ -68,6 +68,8 @@ No production secrets belong in Git. `.env` files are ignored.
 - Production build: `npm run build`.
 - Health check: `GET /api/health`.
 
+The local verification run also exercised the seeded PostgreSQL API: duplicate UUID retries returned `DUPLICATE`, an invalid response returned a field reason and was accepted after fixing with the same UUID, worker queries stayed scoped to the signed-in worker, unassigned workers received no forms, and CSV export contained the submitted response.
+
 ## Deployment
 
 Vercel SPA configuration is in `client/vercel.json`; Render API configuration is in `render.yaml`. Render applies Prisma migrations during deploy. Follow [docs/DEPLOY.md](docs/DEPLOY.md) to configure PostgreSQL, CORS, and `VITE_API_URL`.
@@ -79,6 +81,7 @@ API live URL: `https://<your-service>.onrender.com`
 
 - Browser storage can be cleared by the user or evicted by the browser; workers should sync before clearing site data.
 - This initial client does not use background sync on all browsers; it syncs on app open, network restoration, and the manual button.
+- The API sync loop was verified against local PostgreSQL; a full browser airplane-mode/service-worker acceptance run still needs to be performed on a device or browser.
 - Rejected submissions can be corrected in the local outbox; editing supports common scalar fields. For structured multi-select and GPS corrections, the response can be recreated from the form.
 - Dashboard filtering currently supports form selection and pagination on the API; additional worker/date/status controls can be added.
 - GPS requires browser permission and a device location sensor.
