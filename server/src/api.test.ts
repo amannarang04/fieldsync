@@ -16,6 +16,15 @@ describe('API access controls', () => {
     expect(result.body.status).toBe('ok');
   });
 
+  it('returns the shared JSON validation error for invalid body and query input', async () => {
+    const invalidForm = await request(app).post('/api/forms').send({ title: '', fields: [] });
+    expect(invalidForm.status).toBe(400);
+    expect(invalidForm.body.error.message).toBe('Invalid request body');
+    const invalidExport = await request(app).get('/api/responses/export.csv');
+    expect(invalidExport.status).toBe(400);
+    expect(invalidExport.body.error.message).toBe('Invalid request query');
+  });
+
   it('requires authentication for assigned forms', async () => {
     const result = await request(app).get('/api/forms/assigned');
     expect(result.status).toBe(401);
@@ -23,7 +32,7 @@ describe('API access controls', () => {
 
   it('requires the ADMIN role to create a form', async () => {
     const workerToken = jwt.sign({ id: 'worker-test', role: 'WORKER' }, 'test-access-secret-not-for-production');
-    const result = await request(app).post('/api/forms').set('Authorization', `Bearer ${workerToken}`).send({ title: 'Forbidden', fields: [] });
+    const result = await request(app).post('/api/forms').set('Authorization', `Bearer ${workerToken}`).send({ title: 'Forbidden', fields: [{ id: 'name', label: 'Name', type: 'text', required: true }] });
     expect(result.status).toBe(403);
   });
 
