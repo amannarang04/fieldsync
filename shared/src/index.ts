@@ -23,7 +23,7 @@ export function validateAnswers(fields: Field[], answers: Record<string, unknown
   for (const field of fields) {
     if (!isFieldVisible(field, answers)) continue;
     const value = answers[field.id];
-    if ((value === undefined || value === null || value === '') && field.required) { errors.push(`${field.label} is required`); continue; }
+    if ((value === undefined || value === null || value === '' || (field.type === 'multiple_choice' && Array.isArray(value) && value.length === 0)) && field.required) { errors.push(`${field.label} is required`); continue; }
     if (value === undefined || value === null || value === '') continue;
     if (field.type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) errors.push(`${field.label} must be a number`);

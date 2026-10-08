@@ -3,6 +3,7 @@ dotenv.config({ path: 'server/.env' });
 process.env.DATABASE_URL ??= 'postgresql://fieldsync:fieldsync_dev@localhost:5433/fieldsync';
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 test.afterAll(async () => { await prisma.$disconnect(); });
@@ -66,6 +67,16 @@ test('production PWA collects offline, rejects and repairs an invalid answer, an
       });
     }, clinics[1]);
 
+    const expiredAccessToken = jwt.sign({ id: workerId, role: 'WORKER' }, process.env.JWT_ACCESS_SECRET ?? 'local-e2e-access-secret-at-least-32-chars', { expiresIn: -1 });
+    await page.evaluate(token => {
+      const session = JSON.parse(localStorage.getItem('fieldsync.session')!);
+      session.accessToken = token;
+      localStorage.setItem('fieldsync.session', JSON.stringify(session));
+    }, expiredAccessToken);
+    // Reload while offline so the API module initializes from the expired token.
+    await page.reload();
+    await expect(page.getByText('● Offline')).toBeVisible();
+
     await context.setOffline(false);
     await page.evaluate(() => {
       window.dispatchEvent(new Event('online'));
@@ -73,14 +84,16 @@ test('production PWA collects offline, rejects and repairs an invalid answer, an
       button?.click();
       button?.click();
     });
-
     await expect(page.locator('.status.SYNCED')).toHaveCount(2, { timeout: 20_000 });
     await expect(page.locator('.status.REJECTED')).toHaveCount(1, { timeout: 20_000 });
     await expect(page.getByText('Children under 5 must be at least 0')).toBeVisible();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fieldsync.session')!).accessToken)).not.toBe(expiredAccessToken);
 
     const rejectedItem = page.locator('.status.REJECTED').locator('..');
-    page.on('dialog', dialog => dialog.accept(dialog.message().includes('Children under 5') ? '3' : dialog.defaultValue()));
     await rejectedItem.getByRole('button', { name: 'Edit and resubmit' }).click();
+    const editor = page.locator('.card').filter({ hasText: 'Edit rejected response' });
+    await editor.getByLabel('Children under 5').fill('3');
+    await editor.getByRole('button', { name: 'Save and resubmit' }).click();
     await expect.poll(async () => prisma.response.count({ where: { workerId, clientId: rejectedClientId } }), { timeout: 10_000 }).toBe(1);
     await expect(page.locator('.status.SYNCED')).toHaveCount(3, { timeout: 20_000 });
 
@@ -149,5 +162,65 @@ test('admin edits a form in the UI and a pending v1 submission still uses v1 val
       await prisma.response.deleteMany({ where: { clientId } });
       await prisma.form.deleteMany({ where: { id: formId } });
     }
+  }
+});
+
+test('rejected response editor supports choices, conditions, dates, and GPS', async ({ page, request }) => {
+  const runId = `editor-${Date.now()}`;
+  const title = `Editor test ${runId}`;
+  const clientId = crypto.randomUUID();
+  const admin = await request.post('http://127.0.0.1:3001/api/auth/login', { data: { email: 'admin@fieldsync.demo', password: 'AdminDemo123!' } });
+  const worker = await request.post('http://127.0.0.1:3001/api/auth/login', { data: { email: 'amina@fieldsync.demo', password: 'WorkerDemo123!' } });
+  const adminSession = await admin.json();
+  const workerSession = await worker.json();
+  const fields = [
+    { id: 'source', label: 'Source', type: 'single_choice', required: true, options: ['Well', 'Pipe'] },
+    { id: 'details', label: 'Well details', type: 'text', required: true, condition: { fieldId: 'source', equals: 'Well' } },
+    { id: 'checks', label: 'Checks completed', type: 'multiple_choice', required: true, options: ['Water test', 'Cover check'] },
+    { id: 'visit', label: 'Visit date', type: 'date', required: true },
+    { id: 'location', label: 'Location', type: 'gps', required: true },
+    { id: 'count', label: 'Households', type: 'number', required: true, min: 1, max: 50 }
+  ];
+  let formId = '';
+  try {
+    const created = await request.post('http://127.0.0.1:3001/api/forms', { headers: { Authorization: `Bearer ${adminSession.accessToken}` }, data: { title, fields } });
+    expect(created.status()).toBe(201);
+    const form = await created.json(); formId = form.id;
+    await request.put(`http://127.0.0.1:3001/api/forms/${formId}/assignments`, { headers: { Authorization: `Bearer ${adminSession.accessToken}` }, data: { workerIds: [workerSession.user.id] } });
+
+    await page.goto('/');
+    await page.getByLabel('Email').fill('amina@fieldsync.demo');
+    await page.getByLabel('Password').fill('WorkerDemo123!');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    await page.evaluate(async payload => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('fieldsync'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('outbox', 'readwrite');
+        tx.objectStore('outbox').put(payload);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      });
+    }, { clientId, formVersionId: form.versions[0].id, formTitle: title, answers: { source: 'Well', details: 'Old details', checks: ['invalid legacy choice'], visit: '2026-10-08', location: { lat: 1, lng: 2 }, count: 2 }, collectedAt: new Date().toISOString(), lat: 1, lng: 2, status: 'REJECTED', reasons: ['Checks completed has invalid choices'], attempts: 0 });
+    await page.reload();
+    await expect(page.getByText('Checks completed has invalid choices')).toBeVisible();
+    const responseItem = page.locator('.card').filter({ hasText: title }).filter({ has: page.getByRole('button', { name: 'Edit and resubmit' }) });
+    await responseItem.getByRole('button', { name: 'Edit and resubmit' }).click();
+    const editor = page.locator('.card').filter({ hasText: 'Edit rejected response' });
+    await expect(editor.getByLabel('Well details')).toBeVisible();
+    await editor.getByLabel('Well details').fill('Updated field notes');
+    await editor.getByLabel('Water test').check();
+    await editor.getByLabel('Visit date').fill('2026-10-09');
+    await editor.getByLabel('Location').fill('3.5, 4.5');
+    await editor.getByLabel('Households').fill('7');
+    await editor.getByRole('button', { name: 'Save and resubmit' }).click();
+    await expect.poll(() => prisma.response.count({ where: { clientId } }), { timeout: 15_000 }).toBe(1);
+    const saved = await prisma.response.findUnique({ where: { clientId } });
+    expect(saved?.answers).toMatchObject({ source: 'Well', details: 'Updated field notes', checks: ['Water test'], visit: '2026-10-09', location: { lat: 3.5, lng: 4.5 }, count: 7 });
+  } finally {
+    await prisma.response.deleteMany({ where: { clientId } });
+    if (formId) await prisma.form.deleteMany({ where: { id: formId } });
   }
 });
