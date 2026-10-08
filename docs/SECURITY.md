@@ -5,13 +5,14 @@ Reviewed with `npm audit` on 2026-10-08. `npm audit fix` was run, then direct de
 Exact workspace audit summaries:
 
 - `npm audit --omit=dev --workspace=@fieldsync/client` → `found 0 vulnerabilities`.
-- `npm audit --omit=dev --workspace=@fieldsync/server` → `3 high severity vulnerabilities`, all reported through `prisma` → `@prisma/config` → `deepmerge-ts`.
+- `npm audit --omit=dev --workspace=@fieldsync/server` → `3 high severity vulnerabilities`, all reported through `prisma` → `@prisma/config` → `deepmerge-ts` in npm's workspace-resolved tree.
 - `npm audit` → 10 total (8 high, 2 moderate, 0 critical), all in development/build tooling paths listed below.
+- Render runs `npm prune --omit=dev` after migration/build, so a production-only install omits Prisma CLI. `@prisma/client` remains for API queries; Prisma's CLI optional peer is absent from that install. The client production audit is clean.
 
 | Dependency path | Severity | Why it remains / mitigation |
 | --- | --- | --- |
 | `tailwindcss@3.4.19`, `chokidar`, `fast-glob`, `micromatch`, `braces`, `postcss-nested`, `postcss-selector-parser` | High/moderate | npm reports the Tailwind 3 transitive ranges. These packages run only during CSS/build processing; they are not shipped in `client/dist` or executed by the production browser. Tailwind 4 requires a config/plugin migration and is deferred for a separate verified change. |
-| `prisma@6.19.3`, `@prisma/config`, `deepmerge-ts@7.1.5` | High | The finding is in the Prisma CLI/configuration toolchain (server devDependency) for local/deploy-time migrations and client generation. It is not bundled into the running API service or used by request handling. npm's server-workspace `--omit=dev` report still includes 3 high findings because the workspace audit resolves Prisma through the Prisma Client peer relationship. A Prisma major migration changes datasource/client setup and requires deployment verification. |
+| `prisma@6.19.3`, `@prisma/config`, `deepmerge-ts@7.1.5` | High | The finding is in the Prisma CLI/configuration toolchain (server devDependency) used for migrations and client generation. Render prunes dev dependencies after these build steps; the CLI/config package is absent from production runtime and request handling. npm's server-workspace `--omit=dev` report still shows 3 highs due the workspace's resolved Prisma Client optional-peer relationship. A Prisma major migration changes datasource/client setup and requires deployment verification. |
 
 These packages execute during build/deploy tooling where applicable, but are not shipped or executed in the production API/browser runtime. Re-run the exact commands above after dependency changes. Revisit these findings when the associated major upgrades are scheduled.
 

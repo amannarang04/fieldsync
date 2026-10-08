@@ -3,7 +3,7 @@
 ## Render API
 
 1. Push this repository to GitHub and create a Render PostgreSQL database in the same region as the web service.
-2. Create a Render web service from the repository and use the checked-in `render.yaml` blueprint. It builds shared types, runs `prisma migrate deploy`, builds the API, starts `npm run start --workspace=server`, and probes `/api/health`.
+2. Create a Render web service from the repository and use the checked-in `render.yaml` blueprint. It builds shared types, runs `prisma migrate deploy`, builds the API, prunes development-only packages from the runtime install, starts `npm run start --workspace=server`, and probes `/api/health`.
 3. Configure the API service environment:
 
 | Variable | Value |
@@ -14,12 +14,14 @@
 | `JWT_REFRESH_SECRET` | Generate a different unique secret in Render; minimum 32 random bytes |
 | `CLIENT_ORIGIN` | Exact frontend origin, e.g. `https://fieldsync-demo.vercel.app` (comma-separated if multiple origins are required) |
 | `PORT` | Leave unset; Render provides the port |
+| `SEED_ADMIN_PASSWORD` | Leave unset for normal deployment; if intentionally seeding, use a unique strong password only for that seed run |
+| `SEED_WORKER_PASSWORD` | Leave unset for normal deployment; if intentionally seeding, use a different unique strong password only for that seed run |
 
 Do not set `SEED_ADMIN_PASSWORD` or `SEED_WORKER_PASSWORD` for an ordinary deployment; do not seed demo accounts into a public service. If an operator deliberately seeds production data, provide two unique strong values through a trusted environment for that one seed run. Production seeding exits with a clear error if either is missing. Never put real values in Git, README files, or deployment configuration committed to the repository.
 
 4. Deploy. Open `https://<your-render-service>.onrender.com/api/health` and confirm `{"status":"ok"}`.
 
-The application start command uses the compiled server and environment variables only; the local ignored `server/.env` file is optional and is not needed on Render. Migrations run during deploy before the API is started.
+The application start command uses the compiled server and environment variables only; the local ignored `server/.env` file is optional and is not needed on Render. Migrations run during deploy before the API is started. The final `npm prune --omit=dev` removes Prisma CLI and other build/test tools after generation and migrations; the API runtime keeps `@prisma/client` and application dependencies.
 
 ## Vercel frontend
 

@@ -3,7 +3,7 @@ services:
     name: fieldsync-api
     runtime: node
     rootDir: .
-    buildCommand: npm install && npm run build --workspace=shared && npm run db:migrate --workspace=server && npm run build --workspace=server
+    buildCommand: npm install && npm run build --workspace=shared && npm run db:migrate --workspace=server && npm run build --workspace=server && npm prune --omit=dev
     startCommand: npm run start --workspace=server
     healthCheckPath: /api/health
     envVars:
