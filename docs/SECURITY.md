@@ -1,13 +1,19 @@
 # Security review
 
-Reviewed with `npm audit` on 2026-10-08. `npm audit fix` was run, then direct development tools were upgraded to clear the critical Vitest and `concurrently` advisories. The current full-tree audit reports no critical issues and 10 remaining advisories (8 high, 2 moderate). The remaining findings are in the Tailwind/PostCSS build chain and Prisma CLI/configuration chain. Prisma's CLI package is a development dependency, though npm's workspace audit still reports it under `--omit=dev` because it is resolved through the workspace's Prisma client peer relationship.
+Reviewed with `npm audit` on 2026-10-08. `npm audit fix` was run, then direct development tools were upgraded to clear the critical Vitest and `concurrently` advisories.
+
+Exact workspace audit summaries:
+
+- `npm audit --omit=dev --workspace=@fieldsync/client` → `found 0 vulnerabilities`.
+- `npm audit --omit=dev --workspace=@fieldsync/server` → `3 high severity vulnerabilities`, all reported through `prisma` → `@prisma/config` → `deepmerge-ts`.
+- `npm audit` → 10 total (8 high, 2 moderate, 0 critical), all in development/build tooling paths listed below.
 
 | Dependency path | Severity | Why it remains / mitigation |
 | --- | --- | --- |
-| `tailwindcss@3.4.19` → `chokidar` / `micromatch` / `braces`, and PostCSS selector parser | High/moderate | Tailwind 3's transitive dependency ranges are reported by npm. Tailwind runs at build time; the generated CSS is served in production. Moving to Tailwind 4 requires a configuration and plugin migration, so this major change is deferred instead of risking a broken production stylesheet. |
-| `prisma@6.19.3` → `@prisma/config` → `deepmerge-ts@7.1.5` | High | This is the Prisma CLI/configuration toolchain used for local migrations and build-time client generation, not the request-serving runtime. A Prisma major migration changes datasource configuration and generated-client setup; it needs a separate migration with deployment verification. |
+| `tailwindcss@3.4.19`, `chokidar`, `fast-glob`, `micromatch`, `braces`, `postcss-nested`, `postcss-selector-parser` | High/moderate | npm reports the Tailwind 3 transitive ranges. These packages run only during CSS/build processing; they are not shipped in `client/dist` or executed by the production browser. Tailwind 4 requires a config/plugin migration and is deferred for a separate verified change. |
+| `prisma@6.19.3`, `@prisma/config`, `deepmerge-ts@7.1.5` | High | The finding is in the Prisma CLI/configuration toolchain (server devDependency) for local/deploy-time migrations and client generation. It is not bundled into the running API service or used by request handling. npm's server-workspace `--omit=dev` report still includes 3 high findings because the workspace audit resolves Prisma through the Prisma Client peer relationship. A Prisma major migration changes datasource/client setup and requires deployment verification. |
 
-No vulnerable package in the findings is used by the deployed request-serving code. The Prisma configuration finding affects CLI operations; Tailwind and PostCSS findings affect CSS compilation. Re-run `npm audit` after dependency changes. These findings should be revisited when the associated major upgrades are scheduled.
+These packages execute during build/deploy tooling where applicable, but are not shipped or executed in the production API/browser runtime. Re-run the exact commands above after dependency changes. Revisit these findings when the associated major upgrades are scheduled.
 
 ## Controls checked
 

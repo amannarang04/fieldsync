@@ -1,19 +1,45 @@
 # Deployment
 
-## API on Render
+## Render API
 
-1. Create a managed PostgreSQL database on Neon, Supabase, or Render and copy its pooled/runtime connection string.
-2. Create a Render web service from this repository using `render.yaml`.
-3. Set `DATABASE_URL` and `CLIENT_ORIGIN` in the service environment. Render generates the JWT secrets.
-4. Deploy. The build command compiles the shared schemas, applies Prisma migrations, and builds the API. Verify `/api/health` returns `{"status":"ok"}`.
-5. Run the seed command once from a trusted environment with the production `DATABASE_URL` if demo records are wanted. Change demo passwords immediately.
+1. Push this repository to GitHub and create a Render PostgreSQL database in the same region as the web service.
+2. Create a Render web service from the repository and use the checked-in `render.yaml` blueprint. It builds shared types, runs `prisma migrate deploy`, builds the API, starts `npm run start --workspace=server`, and probes `/api/health`.
+3. Configure the API service environment:
 
-## Frontend on Vercel
+| Variable | Value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | Render PostgreSQL **internal** connection URL (or the provider's server-side URL) |
+| `JWT_ACCESS_SECRET` | Generate a unique secret in Render; minimum 32 random bytes |
+| `JWT_REFRESH_SECRET` | Generate a different unique secret in Render; minimum 32 random bytes |
+| `CLIENT_ORIGIN` | Exact frontend origin, e.g. `https://fieldsync-demo.vercel.app` (comma-separated if multiple origins are required) |
+| `PORT` | Leave unset; Render provides the port |
 
-1. Import the repository into Vercel.
-2. Set the root directory to `client` (or use the monorepo root and configure the client workspace build).
-3. Build command: `npm run build --workspace=shared && npm run build --workspace=client`; output directory: `client/dist`.
-4. Set `VITE_API_URL` to the deployed API URL plus `/api`.
-5. Add the deployed Vercel origin to the API `CLIENT_ORIGIN`, then redeploy the API.
+Do not set `SEED_ADMIN_PASSWORD` or `SEED_WORKER_PASSWORD` for an ordinary deployment; do not seed demo accounts into a public service. If an operator deliberately seeds production data, provide two unique strong values through a trusted environment for that one seed run. Production seeding exits with a clear error if either is missing. Never put real values in Git, README files, or deployment configuration committed to the repository.
 
-Live URL placeholders: Frontend: `https://<your-project>.vercel.app`; API: `https://<your-service>.onrender.com`.
+4. Deploy. Open `https://<your-render-service>.onrender.com/api/health` and confirm `{"status":"ok"}`.
+
+The application start command uses the compiled server and environment variables only; the local ignored `server/.env` file is optional and is not needed on Render. Migrations run during deploy before the API is started.
+
+## Vercel frontend
+
+1. Import the same GitHub repository into Vercel. Set the project root directory to the repository root so npm workspaces can resolve `shared` and `client`.
+2. Set **Install Command** to `npm install`, **Build Command** to `npm run build --workspace=shared && npm run build --workspace=client`, and **Output Directory** to `client/dist`.
+3. Add this environment variable for Production (and Preview if used):
+
+| Variable | Value |
+| --- | --- |
+| `VITE_API_URL` | `https://<your-render-service>.onrender.com/api` |
+
+4. Deploy the frontend, copy its exact origin (for example `https://fieldsync-demo.vercel.app`), add it to Render's `CLIENT_ORIGIN`, then redeploy the API. If Vercel preview deployments need API access, add their exact allowed origins as comma-separated entries; avoid a wildcard.
+5. Verify the Vercel URL loads the SPA and that login/forms use the deployed API.
+
+`render.yaml` contains the API build/start commands and `/api/health` check. `client/vercel.json` provides the SPA fallback rewrite to `/index.html`.
+
+## Keep-warm note
+
+Render's free web services may sleep after inactivity. The first request after sleep can take longer. If you choose to reduce idle sleeps, configure a free uptime pinger to request `https://<your-render-service>.onrender.com/api/health` periodically, subject to Render's current free-tier terms. This is optional and does not replace health monitoring.
+
+## Local production-preview demo
+
+From a clean checkout run `npm run setup`, then `npm run demo`. The latter builds and starts both the API and Vite production preview; the local health URL is `http://localhost:3001/api/health` and the preview is `http://localhost:4173`.

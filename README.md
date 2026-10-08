@@ -40,14 +40,22 @@ Each local response receives a UUID `clientId` and its `formVersionId` at collec
 
 Prerequisites: Node.js 20+, npm 10+, and Docker Desktop (or PostgreSQL 16).
 
-1. Copy `server/.env.example` to `server/.env` and set long random JWT secrets. Copy `client/.env.example` to `client/.env` if the API URL differs.
-2. Start PostgreSQL: `docker compose up -d` (FieldSync publishes Postgres on host port `5433` to avoid colliding with an existing local database).
-3. Install dependencies from the root: `npm install`.
-4. Generate Prisma client and apply migrations: `npm run db:migrate --workspace=server`.
-5. Load demo data: `npm run db:seed --workspace=server`.
-6. Start API and Vite together: `npm run dev` (API port 3001, client port 5173).
+From a fresh clone, run these commands from the repository root:
 
-Demo accounts: `admin@fieldsync.demo` / `AdminDemo123!`; `amina@fieldsync.demo` and `leo@fieldsync.demo` / `WorkerDemo123!`. These are local demo credentials; change them before any shared deployment.
+```sh
+npm run setup
+npm run demo
+```
+
+`setup` creates ignored `server/.env` and `client/.env` files from their examples if needed, generates random local JWT secrets, starts Docker PostgreSQL on host port `5433`, waits for its health check, installs dependencies when absent, generates Prisma Client, applies migrations, and seeds the local database. `demo` repeats setup as a safety check, builds all workspaces, then runs the API and production Vite preview together. Keep that terminal open while using the app.
+
+- Production preview: http://localhost:4173
+- API health: http://localhost:3001/api/health
+- Vite development mode (optional): `npm run dev` at http://localhost:5173
+
+If `npm ci` or install fails on Windows with `EPERM` unlinking a Rollup native module, close running FieldSync/Vite/Node processes that use this checkout and retry. A running preview can lock files under `node_modules` during a clean install.
+
+Local development only credentials (never use or publish these for production): `admin@fieldsync.demo` / `AdminDemo123!`; `amina@fieldsync.demo` and `leo@fieldsync.demo` / `WorkerDemo123!`. Fresh local seeds use these fallback passwords only when `NODE_ENV` is not `production` and seed password variables are unset. Production seeding refuses to run unless both seed password variables are provided; use unique, strong values and never seed demo accounts on a public deployment.
 
 ## Environment variables
 
@@ -56,9 +64,11 @@ Demo accounts: `admin@fieldsync.demo` / `AdminDemo123!`; `amina@fieldsync.demo` 
 | `DATABASE_URL` | PostgreSQL connection | Local URL in `server/.env.example` |
 | `JWT_ACCESS_SECRET` | Signs short-lived access JWTs | Generate a random secret |
 | `JWT_REFRESH_SECRET` | Signs refresh JWTs | Generate a different random secret |
-| `CLIENT_ORIGIN` | Allowed browser origin | `http://localhost:5173` |
+| `CLIENT_ORIGIN` | Comma-separated allowed browser origins | `http://localhost:5173,http://localhost:4173` |
 | `PORT` | API listen port | `3001` |
 | `VITE_API_URL` | Client API base | `http://localhost:3001/api` |
+| `SEED_ADMIN_PASSWORD` | Admin password for an intentional seed run | Unique strong secret; blank uses local-only fallback outside production |
+| `SEED_WORKER_PASSWORD` | Shared worker password for an intentional seed run | Unique strong secret; blank uses local-only fallback outside production |
 
 No production secrets belong in Git. `.env` files are ignored.
 
@@ -71,13 +81,13 @@ No production secrets belong in Git. `.env` files are ignored.
 
 ### How the offline sync was verified
 
-The Playwright suite runs against the production build and a real Chromium browser. It logs in as a seeded worker, lets the service worker cache the app and assigned form, switches the browser context offline, reloads, and queues three responses locally. It restores connectivity, expires the access token to exercise refresh, triggers sync twice quickly, and checks that valid UUIDs are stored once while the invalid record is visibly rejected with its server reason. It also edits and resubmits the rejected record with the same UUID. Run it with `npm run e2e` after starting Docker/PostgreSQL, applying migrations, and seeding the database.
+The Playwright suite runs against the production build and a real Chromium browser. It logs in as a seeded worker, lets the service worker cache the app and assigned form, switches the browser context offline, reloads, and queues three responses locally. It restores connectivity, expires the access token to exercise refresh, triggers sync twice quickly, and checks that valid UUIDs are stored once while the invalid record is visibly rejected with its server reason. It also edits and resubmits the rejected record with the same UUID. Run `npm run setup` before `npm run e2e` on a fresh checkout.
 
 The local verification run also exercised the seeded PostgreSQL API: duplicate UUID retries returned `DUPLICATE`, an invalid response returned a field reason and was accepted after fixing with the same UUID, worker queries stayed scoped to the signed-in worker, unassigned workers received no forms, and CSV export contained the submitted response.
 
 ## Deployment
 
-Vercel SPA configuration is in `client/vercel.json`; Render API configuration is in `render.yaml`. Render applies Prisma migrations during deploy. Follow [docs/DEPLOY.md](docs/DEPLOY.md) to configure PostgreSQL, CORS, and `VITE_API_URL`.
+Vercel monorepo build/SPA configuration is in the root `vercel.json` (with a client-level SPA rewrite in `client/vercel.json`); Render API configuration is in `render.yaml`. Render applies Prisma migrations during deploy. Follow [docs/DEPLOY.md](docs/DEPLOY.md) to configure PostgreSQL, CORS, and `VITE_API_URL`.
 
 Frontend live URL: `https://<your-project>.vercel.app`  
 API live URL: `https://<your-service>.onrender.com`
