@@ -4,6 +4,7 @@ process.env.DATABASE_URL ??= 'postgresql://fieldsync:fieldsync_dev@localhost:543
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import { readFile } from 'node:fs/promises';
 
 const prisma = new PrismaClient();
 test.afterAll(async () => { await prisma.$disconnect(); });
@@ -222,5 +223,75 @@ test('rejected response editor supports choices, conditions, dates, and GPS', as
   } finally {
     await prisma.response.deleteMany({ where: { clientId } });
     if (formId) await prisma.form.deleteMany({ where: { id: formId } });
+  }
+});
+
+test('unassigned workers cannot read another response or submit to an unassigned form', async ({ request }) => {
+  const api = 'http://127.0.0.1:3001/api';
+  const login = async (email: string, password: string) => (await request.post(`${api}/auth/login`, { data: { email, password } })).json();
+  const admin = await login('admin@fieldsync.demo', 'AdminDemo123!');
+  const assigned = await login('amina@fieldsync.demo', 'WorkerDemo123!');
+  const email = `unassigned-${Date.now()}@fieldsync.demo`;
+  let temporaryWorkerId = '';
+  try {
+    const workerCreate = await request.post(`${api}/admin/workers`, { headers: { Authorization: `Bearer ${admin.accessToken}` }, data: { email, name: 'Unassigned E2E', password: 'WorkerDemo123!' } });
+    expect(workerCreate.status()).toBe(201);
+    temporaryWorkerId = (await workerCreate.json()).id;
+    const unassigned = await login(email, 'WorkerDemo123!');
+    const existing = await request.get(`${api}/responses?workerId=${assigned.user.id}`, { headers: { Authorization: `Bearer ${admin.accessToken}` } });
+    const responseId = (await existing.json()).items[0]?.id;
+    expect(responseId).toBeTruthy();
+    const privateRead = await request.get(`${api}/responses/${responseId}`, { headers: { Authorization: `Bearer ${unassigned.accessToken}` } });
+    expect(privateRead.status()).toBe(404);
+
+    const forms = await request.get(`${api}/forms/assigned`, { headers: { Authorization: `Bearer ${assigned.accessToken}` } });
+    const form = (await forms.json())[0];
+    const result = await request.post(`${api}/sync`, { headers: { Authorization: `Bearer ${unassigned.accessToken}` }, data: { submissions: [{ clientId: crypto.randomUUID(), formVersionId: form.versions[0].id, answers: {}, collectedAt: new Date().toISOString() }] } });
+    expect((await result.json()).results[0]).toMatchObject({ status: 'REJECTED', reasons: ['This form is no longer assigned to you'] });
+  } finally {
+    if (temporaryWorkerId) await prisma.user.deleteMany({ where: { id: temporaryWorkerId } });
+  }
+});
+
+test('dashboard filters paginate server results and export the same active filters', async ({ page }) => {
+  const runId = `filter-${Date.now()}`;
+  const prefix = `FILTER-${runId}`;
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: 'admin@fieldsync.demo' } });
+  const worker = await prisma.user.findUniqueOrThrow({ where: { email: 'amina@fieldsync.demo' } });
+  const otherWorker = await prisma.user.findUniqueOrThrow({ where: { email: 'leo@fieldsync.demo' } });
+  const form = await prisma.form.findFirstOrThrow({ where: { title: 'Community Health Check' }, include: { versions: { orderBy: { version: 'desc' }, take: 1 } } });
+  const version = form.versions[0];
+  const ids = Array.from({ length: 53 }, () => crypto.randomUUID());
+  try {
+    await prisma.response.createMany({ data: [
+      ...ids.slice(0, 51).map((clientId, index) => ({ clientId, formVersionId: version.id, workerId: worker.id, answers: { clinic: `${prefix}-match-${index}`, children: 4, date: '2026-09-17' } as any, collectedAt: new Date('2026-09-17T12:00:00.000Z'), status: 'ACCEPTED' as const })),
+      { clientId: ids[51], formVersionId: version.id, workerId: otherWorker.id, answers: { clinic: `${prefix}-other-worker`, children: 2, date: '2026-09-17' }, collectedAt: new Date('2026-09-17T12:00:00.000Z'), status: 'ACCEPTED' },
+      { clientId: ids[52], formVersionId: version.id, workerId: worker.id, answers: { clinic: `${prefix}-other-day`, children: 2, date: '2026-09-16' }, collectedAt: new Date('2026-09-16T12:00:00.000Z'), status: 'ACCEPTED' }
+    ] });
+
+    await page.goto('/');
+    await page.getByLabel('Email').fill('admin@fieldsync.demo');
+    await page.getByLabel('Password').fill('AdminDemo123!');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Responses' }).click();
+    await page.getByLabel('Form').selectOption({ label: 'Community Health Check' });
+    await page.getByLabel('Worker').selectOption({ label: 'Amina Yusuf' });
+    await page.getByLabel('Status').selectOption('ACCEPTED');
+    await page.getByLabel('From').fill('2026-09-17');
+    await page.getByLabel('To').fill('2026-09-17');
+    await expect(page.getByText('Page 1 of 2 · 51 responses')).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(50);
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByText('Page 2 of 2 · 51 responses')).toBeVisible();
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download filtered CSV' }).click()]);
+    const csv = await readFile((await download.path())!, 'utf8');
+    expect(csv).toContain(`${prefix}-match-0`);
+    expect(csv).not.toContain(`${prefix}-other-worker`);
+    expect(csv).not.toContain(`${prefix}-other-day`);
+    expect(csv.trim().split(/\r?\n/)).toHaveLength(52);
+  } finally {
+    await prisma.response.deleteMany({ where: { clientId: { in: ids } } });
   }
 });

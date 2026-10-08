@@ -56,4 +56,13 @@ describe('API access controls', () => {
     expect(find.mock.calls[0][0]?.where).toEqual({ assignments: { some: { workerId: 'worker-only-me' } } });
     vi.restoreAllMocks();
   });
+
+  it('hides another worker response by ID', async () => {
+    const workerToken = jwt.sign({ id: 'worker-only-me', role: 'WORKER' }, 'test-access-secret-not-for-production');
+    const find = vi.spyOn(prisma.response, 'findFirst').mockResolvedValue(null);
+    const result = await request(app).get('/api/responses/private-response').set('Authorization', `Bearer ${workerToken}`);
+    expect(result.status).toBe(404);
+    expect(find.mock.calls[0][0]?.where).toEqual({ id: 'private-response', workerId: 'worker-only-me' });
+    vi.restoreAllMocks();
+  });
 });
