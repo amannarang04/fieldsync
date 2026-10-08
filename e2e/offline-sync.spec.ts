@@ -9,6 +9,24 @@ import { readFile } from 'node:fs/promises';
 const prisma = new PrismaClient();
 test.afterAll(async () => { await prisma.$disconnect(); });
 
+test('offline login is not attempted and shows a useful connection message', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  let loginRequests = 0;
+  page.on('request', request => { if (request.url().endsWith('/api/auth/login')) loginRequests++; });
+  await context.setOffline(true);
+  await page.getByLabel('Email').fill('amina@fieldsync.demo');
+  await page.getByLabel('Password').fill('WorkerDemo123!');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Cannot reach server. Your data is safe on this device and will sync later.')).toBeVisible();
+  expect(loginRequests).toBe(0);
+  await context.setOffline(false);
+  await page.route('**/api/auth/login', route => route.abort('failed'));
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Cannot reach server. Your data is safe on this device and will sync later.')).toBeVisible();
+  expect(loginRequests).toBe(1);
+});
+
 test('production PWA collects offline, rejects and repairs an invalid answer, and syncs UUIDs once', async ({ page, context, request }) => {
   const runId = `e2e-${Date.now()}`;
   const clinics = [`${runId}-valid-one`, `${runId}-invalid-then-fixed`, `${runId}-valid-two`];

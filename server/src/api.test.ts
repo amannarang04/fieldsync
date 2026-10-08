@@ -16,6 +16,22 @@ describe('API access controls', () => {
     expect(result.body.status).toBe('ok');
   });
 
+  it('allows each comma-separated configured browser origin through CORS', async () => {
+    const original = process.env.CLIENT_ORIGIN;
+    process.env.CLIENT_ORIGIN = 'http://localhost:5173, http://localhost:4173';
+    try {
+      for (const origin of ['http://localhost:5173', 'http://localhost:4173']) {
+        const response = await request(app).get('/api/health').set('Origin', origin);
+        expect(response.headers['access-control-allow-origin']).toBe(origin);
+      }
+      const blocked = await request(app).get('/api/health').set('Origin', 'http://evil.example');
+      expect(blocked.headers['access-control-allow-origin']).toBeUndefined();
+    } finally {
+      if (original === undefined) delete process.env.CLIENT_ORIGIN;
+      else process.env.CLIENT_ORIGIN = original;
+    }
+  });
+
   it('returns the shared JSON validation error for invalid body and query input', async () => {
     const invalidForm = await request(app).post('/api/forms').send({ title: '', fields: [] });
     expect(invalidForm.status).toBe(400);

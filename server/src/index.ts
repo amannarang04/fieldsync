@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: process.env.ENV_FILE ?? 'server/.env' });
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+dotenv.config({ path: process.env.ENV_FILE ?? resolve(existsSync('server/.env') ? 'server/.env' : '.env') });
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,9 +9,15 @@ import apiRoutes from './routes/index.js';
 import { validateRequest } from './middleware/validateRequest.js';
 import { prisma } from './repositories/prisma.js';
 
+const allowedOrigins = () => (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
+  .split(',').map(origin => origin.trim()).filter(Boolean);
+
 export const app = express();
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173' }));
+app.use(cors({ origin: (origin, callback) => {
+  if (!origin || allowedOrigins().includes(origin)) return callback(null, true);
+  return callback(null, false);
+} }));
 app.use(express.json({ limit: '1mb' }));
 app.use(validateRequest);
 app.use('/api', apiRoutes);
