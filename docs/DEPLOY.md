@@ -3,7 +3,7 @@
 ## Render API
 
 1. Push this repository to GitHub and create a Render PostgreSQL database in the same region as the web service.
-2. Create a Render web service from the repository and use the checked-in `render.yaml` blueprint. It builds shared types, runs `prisma migrate deploy`, builds the API, prunes development-only packages from the runtime install, starts `npm run start --workspace=server`, and probes `/api/health`.
+2. Create a Render web service from the repository and use the checked-in `render.yaml` blueprint. It builds shared types, runs `prisma migrate deploy`, builds the API, prunes development and optional tooling from the runtime install, starts `npm run start --workspace=server`, and probes `/api/health`.
 3. Configure the API service environment:
 
 | Variable | Value |
@@ -21,7 +21,7 @@ Do not set `SEED_ADMIN_PASSWORD` or `SEED_WORKER_PASSWORD` for an ordinary deplo
 
 4. Deploy. Open `https://<your-render-service>.onrender.com/api/health` and confirm `{"status":"ok"}`.
 
-The application start command uses the compiled server and environment variables only; the local ignored `server/.env` file is optional and is not needed on Render. Migrations run during deploy before the API is started. The final `npm prune --omit=dev` removes Prisma CLI and other build/test tools after generation and migrations; the API runtime keeps `@prisma/client` and application dependencies.
+The application start command uses the compiled server and environment variables only; the local ignored `server/.env` file is optional and is not needed on Render. Migrations run during deploy before the API is started. The final `npm prune --omit=dev --omit=optional` removes Prisma CLI and other build/test tools after generation and migrations; the API runtime keeps `@prisma/client` and application dependencies.
 
 ## Vercel frontend
 
