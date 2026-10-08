@@ -47,13 +47,13 @@ npm run setup
 npm run demo
 ```
 
-`setup` creates ignored `server/.env` and `client/.env` files from their examples if needed, generates random local JWT secrets, starts Docker PostgreSQL on host port `5433`, waits for its health check, installs dependencies when absent, generates Prisma Client, applies migrations, and seeds the local database. `demo` repeats setup as a safety check, builds all workspaces, then runs the API and production Vite preview together. Keep that terminal open while using the app.
+`setup` creates ignored `server/.env` and `client/.env` files from their examples if needed, generates random local JWT secrets, starts Docker PostgreSQL on host port `5433`, waits for its health check, installs dependencies when absent, generates Prisma Client, applies migrations, and seeds the local database. On a fresh start, `demo` repeats setup, builds all workspaces, and runs the API and production Vite preview together. It detects an existing healthy service and starts a missing counterpart without duplicating processes or rebuilding Prisma while the API is using its native engine. If both are already healthy, it prints their URLs and exits successfully.
 
 - Production preview: http://localhost:4173
 - API health: http://localhost:3001/api/health
 - Vite development mode (optional): `npm run dev` at http://localhost:5173
 
-If `npm ci` or install fails on Windows with `EPERM` unlinking a Rollup native module, close running FieldSync/Vite/Node processes that use this checkout and retry. A running preview can lock files under `node_modules` during a clean install.
+If install or a manual build fails on Windows with `EPERM` unlinking Rollup or renaming Prisma's query-engine file, close running FieldSync/Vite/Node processes that use this checkout and retry. A running API can lock the Prisma engine during generation, and a running preview can lock files under `node_modules` during a clean install. `npm run demo` avoids regenerating/rebuilding components already in use when it can safely start only the missing service.
 
 Local development only credentials (never use or publish these for production): `admin@fieldsync.demo` / `AdminDemo123!`; `amina@fieldsync.demo` and `leo@fieldsync.demo` / `WorkerDemo123!`. Fresh local seeds use these fallback passwords only when `NODE_ENV` is not `production` and seed password variables are unset. Production seeding refuses to run unless both seed password variables are provided; use unique, strong values and never seed demo accounts on a public deployment.
 
