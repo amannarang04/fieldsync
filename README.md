@@ -66,7 +66,12 @@ No production secrets belong in Git. `.env` files are ignored.
 
 - Tests: `npm test` (shared evaluator/answer/retry tests and API tests).
 - Production build: `npm run build`.
+- Production browser E2E: `npx playwright install chromium` (once per machine), then `npm run e2e`. This builds the client and API, starts the API and Vite preview against the local PostgreSQL database, and runs the offline browser scenarios.
 - Health check: `GET /api/health`.
+
+### How the offline sync was verified
+
+The Playwright suite runs against the production build and a real Chromium browser. It logs in as a seeded worker, lets the service worker cache the app and assigned form, switches the browser context offline, reloads, and queues three responses locally. It restores connectivity, expires the access token to exercise refresh, triggers sync twice quickly, and checks that valid UUIDs are stored once while the invalid record is visibly rejected with its server reason. It also edits and resubmits the rejected record with the same UUID. Run it with `npm run e2e` after starting Docker/PostgreSQL, applying migrations, and seeding the database.
 
 The local verification run also exercised the seeded PostgreSQL API: duplicate UUID retries returned `DUPLICATE`, an invalid response returned a field reason and was accepted after fixing with the same UUID, worker queries stayed scoped to the signed-in worker, unassigned workers received no forms, and CSV export contained the submitted response.
 
@@ -77,15 +82,12 @@ Vercel SPA configuration is in `client/vercel.json`; Render API configuration is
 Frontend live URL: `https://<your-project>.vercel.app`  
 API live URL: `https://<your-service>.onrender.com`
 
-## Known limitations
+## Operational notes
 
-- Browser storage can be cleared by the user or evicted by the browser; workers should sync before clearing site data.
-- This initial client does not use background sync on all browsers; it syncs on app open, network restoration, and the manual button.
-- The API sync loop was verified against local PostgreSQL; a full browser airplane-mode/service-worker acceptance run still needs to be performed on a device or browser.
-- Rejected submissions can be corrected in the local outbox; editing supports common scalar fields. For structured multi-select and GPS corrections, the response can be recreated from the form.
-- Dashboard filtering currently supports form selection and pagination on the API; additional worker/date/status controls can be added.
-- GPS requires browser permission and a device location sensor.
-- Deployment, production credentials, demo recording, and submission form remain manual.
+- Browser storage can be cleared or evicted; workers should sync before clearing site data.
+- Sync runs when the app opens, connectivity returns, or the worker selects Sync now; cross-browser background sync is not required.
+- GPS capture requires browser location permission and an available location sensor. Coordinates can also be edited directly in the response form.
+- Live hosting, production credentials, demo recording, and submission steps require deployment-specific setup.
 
 ## Design decisions
 
