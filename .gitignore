@@ -10,3 +10,5 @@ client/public/sw.js
 client/public/workbox-*.js
 server/generated/
 *.tsbuildinfo
+playwright-report/
+test-results/
