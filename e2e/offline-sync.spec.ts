@@ -42,6 +42,7 @@ test('production PWA collects offline, rejects and repairs an invalid answer, an
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByRole('heading', { name: 'Your assigned surveys' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Community Health Check' })).toBeVisible();
+    await page.locator('.survey-card').filter({ has: page.getByRole('heading', { name: 'Community Health Check' }) }).getByRole('button', { name: 'Start survey' }).click();
 
     const session = await page.evaluate(() => JSON.parse(localStorage.getItem('fieldsync.session') ?? 'null'));
     const me = await request.get('http://127.0.0.1:3001/api/auth/me', { headers: { Authorization: `Bearer ${session.accessToken}` } });
@@ -108,7 +109,7 @@ test('production PWA collects offline, rejects and repairs an invalid answer, an
     await expect(page.getByText('Children under 5 must be at least 0')).toBeVisible();
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fieldsync.session')!).accessToken)).not.toBe(expiredAccessToken);
 
-    const rejectedItem = page.locator('.status.REJECTED').locator('..');
+    const rejectedItem = page.locator('.outbox-item').filter({ has: page.locator('.status.REJECTED') });
     await rejectedItem.getByRole('button', { name: 'Edit and resubmit' }).click();
     const editor = page.locator('.card').filter({ hasText: 'Edit rejected response' });
     await editor.getByLabel('Children under 5').fill('3');

@@ -1,1 +1,1 @@
-export default {content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{}},plugins:[]};
+module.exports={content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{colors:{brand:{50:'#effaf8',100:'#d8f1ed',500:'#0f766e',600:'#0b655e',700:'#0b514d'},slate:{950:'#101c22'}},borderRadius:{'2xl':'1rem','3xl':'1.25rem'},boxShadow:{soft:'0 8px 26px rgba(28,51,65,.055)',lift:'0 14px 34px rgba(28,51,65,.1)'},spacing:{'18':'4.5rem','22':'5.5rem'}}},plugins:[]};

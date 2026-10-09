@@ -15,6 +15,14 @@ FieldSync is an offline-first survey app. It caches the app shell and assigned f
 
 Implemented form fields: text, number, single and multiple choice, date, and GPS capture. Conditional fields use `fieldId` and `equals`. Edits publish a new immutable form version; old responses keep their original version.
 
+## Screenshots
+
+| Sign in | Worker surveys | Admin dashboard | Form builder |
+| --- | --- | --- | --- |
+| ![FieldSync sign-in screen](docs/screenshots/login-mobile-375.png) | ![Worker survey list](docs/screenshots/worker-collect-desktop-1280.png) | ![Admin dashboard](docs/screenshots/admin-dashboard-desktop-1280.png) | ![Survey form builder](docs/screenshots/form-builder-desktop-1280.png) |
+
+Screenshots are captured from the production preview at 375px, 768px, and 1280px widths in `docs/screenshots/`.
+
 ## Tech stack
 
 React, Vite, TypeScript, PWA/Workbox, Tailwind CSS, Dexie/IndexedDB, Node.js, Express, Zod, PostgreSQL, Prisma, JWT, bcrypt, Leaflet/OpenStreetMap, Vitest, Supertest.
