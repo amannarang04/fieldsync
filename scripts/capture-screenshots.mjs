@@ -31,6 +31,7 @@ async function capture(role, viewport) {
   } else {
     await signIn(page, 'admin@fieldsync.demo', 'AdminDemo123!');
     await page.screenshot({ path: `${output}/admin-dashboard-${viewport.name}.png`, fullPage: false });
+    if (viewport.width <= 640) await page.getByRole('button', { name: 'Open navigation menu' }).click();
     await page.getByRole('button', { name: 'Forms' }).click();
     await page.waitForTimeout(1000);
     await page.getByRole('heading', { name: 'Form builder' }).waitFor();
